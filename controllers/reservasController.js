@@ -183,14 +183,14 @@ const getReservas = async (req, res) => {
         r.estado_reserva,
         r.fecha_creacion,
         r.notas_adicionales,
-        c.nombre AS nombre_cliente,
+        c.nombre_completo AS nombre_cliente,
         c.email,
         COUNT(dr.id_habitacion) as total_habitaciones,
         COALESCE(SUM(dr.subtotal), 0) as total_costo
       FROM Reservas r
       LEFT JOIN Clientes c ON r.id_cliente = c.id_cliente
       LEFT JOIN Detalle_Reservas dr ON r.id_reserva = dr.id_reserva
-      GROUP BY r.id_reserva, r.id_cliente, r.estado_reserva, r.fecha_creacion, r.notas_adicionales, c.nombre, c.email
+      GROUP BY r.id_reserva, r.id_cliente, r.estado_reserva, r.fecha_creacion, r.notas_adicionales, c.nombre_completo, c.email
       ORDER BY r.fecha_creacion DESC
     `;
     
