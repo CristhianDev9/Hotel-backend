@@ -108,6 +108,29 @@ const createHabitacion = async (req, res) => {
   }
 };
 
+const updateHabitacion = async (req, res) => {
+  const { id } = req.params;
+  const { estado } = req.body;
+  try {
+    if (!estado) {
+      return res.status(400).json({ message: 'El estado es requerido' });
+    }
+    const result = await db.query(
+      'UPDATE Habitaciones SET estado = $1 WHERE id_habitacion = $2 RETURNING *',
+      [estado, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Habitación no encontrada' });
+    }
+    res.json({ 
+      message: 'Estado de habitación actualizado correctamente',
+      habitacion: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 const deleteHabitacion = async (req, res) => {
   const { id } = req.params;
   try {
@@ -165,6 +188,6 @@ const deleteServicio = async (req, res) => {
 module.exports = {
   getClientes, createCliente, updateCliente, deleteCliente,
   getTiposHabitacion, createTipoHabitacion,
-  getHabitaciones, createHabitacion, deleteHabitacion,
+  getHabitaciones, createHabitacion, updateHabitacion, deleteHabitacion,
   getServicios, createServicio, deleteServicio
 };

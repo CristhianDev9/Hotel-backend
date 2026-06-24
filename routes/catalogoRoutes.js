@@ -4,7 +4,7 @@ const { verifyToken } = require('../middlewares/authMiddleware');
 const {
   getClientes, createCliente, updateCliente, deleteCliente,
   getTiposHabitacion, createTipoHabitacion,
-  getHabitaciones, createHabitacion, deleteHabitacion,
+  getHabitaciones, createHabitacion, updateHabitacion, deleteHabitacion,
   getServicios, createServicio, deleteServicio
 } = require('../controllers/catalogoController');
 
@@ -24,6 +24,7 @@ router.post('/tipos-habitacion', createTipoHabitacion);
 // Habitaciones
 router.get('/habitaciones', getHabitaciones);
 router.post('/habitaciones', createHabitacion);
+router.put('/habitaciones/:id', updateHabitacion);
 router.delete('/habitaciones/:id', deleteHabitacion);
 
 // Servicios Adicionales
