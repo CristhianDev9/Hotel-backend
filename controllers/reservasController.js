@@ -173,8 +173,42 @@ const checkoutReserva = async (req, res) => {
   }
 };
 
+// GET /api/reservas - Listar todas las reservas
+const getReservas = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        r.id_reserva,
+        r.id_cliente,
+        r.estado_reserva,
+        r.fecha_creacion,
+        r.notas_adicionales,
+        c.nombre AS nombre_cliente,
+        c.email,
+        COUNT(dr.id_habitacion) as total_habitaciones,
+        COALESCE(SUM(dr.subtotal), 0) as total_costo
+      FROM Reservas r
+      LEFT JOIN Clientes c ON r.id_cliente = c.id_cliente
+      LEFT JOIN Detalle_Reservas dr ON r.id_reserva = dr.id_reserva
+      GROUP BY r.id_reserva, r.id_cliente, r.estado_reserva, r.fecha_creacion, r.notas_adicionales, c.nombre, c.email
+      ORDER BY r.fecha_creacion DESC
+    `;
+    
+    const result = await db.query(query);
+    
+    res.json({
+      message: 'Reservas obtenidas exitosamente',
+      total: result.rows.length,
+      reservas: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   crearReserva,
+  getReservas,
   getEstadoCuenta,
   checkoutReserva
 };

@@ -2,9 +2,13 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middlewares/authMiddleware');
 const {
-  crearReserva, getEstadoCuenta, checkoutReserva
+  crearReserva, getReservas, getEstadoCuenta, checkoutReserva
 } = require('../controllers/reservasController');
 
+// GET sin autenticación para listar reservas
+router.get('/reservas', getReservas);
+
+// Resto de rutas con autenticación
 router.use(verifyToken);
 
 router.post('/reservas', crearReserva);
