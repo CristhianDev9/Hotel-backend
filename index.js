@@ -7,6 +7,7 @@ const authRoutes = require('./routes/authRoutes');
 const catalogoRoutes = require('./routes/catalogoRoutes');
 const reservasRoutes = require('./routes/reservasRoutes');
 const consumosPagosRoutes = require('./routes/consumosPagosRoutes');
+const rolesRoutes = require('./routes/rolesRoutes');
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', catalogoRoutes);
 app.use('/api', reservasRoutes);
 app.use('/api', consumosPagosRoutes);
+app.use('/api', rolesRoutes);
 
 // Endpoint de prueba
 app.get('/', (req, res) => {
