@@ -185,17 +185,29 @@ const getReservas = async (req, res) => {
         r.notas_adicionales,
         c.nombre_completo AS nombre_cliente,
         c.email,
-        COUNT(dr.id_habitacion) as total_habitaciones,
-        COALESCE(SUM(dr.subtotal), 0) as total_costo
+        COALESCE(COUNT(dr.id_habitacion), 0) as total_habitaciones,
+        COALESCE(SUM(dr.subtotal), 0) as total_costo,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id_habitacion', dr.id_habitacion,
+              'numero_habitacion', h.numero_habitacion,
+              'fecha_checkin', to_char(dr.fecha_checkin, 'YYYY-MM-DD'),
+              'fecha_checkout', to_char(dr.fecha_checkout, 'YYYY-MM-DD')
+            )
+          ) FILTER (WHERE dr.id_habitacion IS NOT NULL),
+          '[]'
+        ) as habitaciones
       FROM Reservas r
       LEFT JOIN Clientes c ON r.id_cliente = c.id_cliente
       LEFT JOIN Detalle_Reservas dr ON r.id_reserva = dr.id_reserva
+      LEFT JOIN Habitaciones h ON dr.id_habitacion = h.id_habitacion
       GROUP BY r.id_reserva, r.id_cliente, r.estado_reserva, r.fecha_creacion, r.notas_adicionales, c.nombre_completo, c.email
       ORDER BY r.fecha_creacion DESC
     `;
-    
+
     const result = await db.query(query);
-    
+
     res.json({
       message: 'Reservas obtenidas exitosamente',
       total: result.rows.length,
@@ -206,9 +218,72 @@ const getReservas = async (req, res) => {
   }
 };
 
+// PATCH /api/reservas/:id - Actualizar estado_reserva y/o notas_adicionales
+const updateReserva = async (req, res) => {
+  const { id } = req.params;
+  const { estado_reserva, notas_adicionales } = req.body;
+
+  if (estado_reserva === undefined && notas_adicionales === undefined) {
+    return res.status(400).json({ message: 'Debe enviar al menos uno de: estado_reserva, notas_adicionales' });
+  }
+
+  try {
+    // Actualizar campos proporcionados
+    const updQuery = `
+      UPDATE Reservas
+      SET estado_reserva = COALESCE($1, estado_reserva),
+          notas_adicionales = COALESCE($2, notas_adicionales)
+      WHERE id_reserva = $3
+      RETURNING id_reserva
+    `;
+
+    const updRes = await db.query(updQuery, [estado_reserva || null, notas_adicionales || null, id]);
+    if (updRes.rows.length === 0) return res.status(404).json({ message: 'Reserva no encontrada' });
+
+    // Recuperar la reserva en formato consistente (incluye habitaciones)
+    const fetchQuery = `
+      SELECT 
+        r.id_reserva,
+        r.id_cliente,
+        r.estado_reserva,
+        r.fecha_creacion,
+        r.notas_adicionales,
+        c.nombre_completo AS nombre_cliente,
+        c.email,
+        COALESCE(COUNT(dr.id_habitacion), 0) as total_habitaciones,
+        COALESCE(SUM(dr.subtotal), 0) as total_costo,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id_habitacion', dr.id_habitacion,
+              'numero_habitacion', h.numero_habitacion,
+              'fecha_checkin', to_char(dr.fecha_checkin, 'YYYY-MM-DD'),
+              'fecha_checkout', to_char(dr.fecha_checkout, 'YYYY-MM-DD')
+            )
+          ) FILTER (WHERE dr.id_habitacion IS NOT NULL),
+          '[]'
+        ) as habitaciones
+      FROM Reservas r
+      LEFT JOIN Clientes c ON r.id_cliente = c.id_cliente
+      LEFT JOIN Detalle_Reservas dr ON r.id_reserva = dr.id_reserva
+      LEFT JOIN Habitaciones h ON dr.id_habitacion = h.id_habitacion
+      WHERE r.id_reserva = $1
+      GROUP BY r.id_reserva, r.id_cliente, r.estado_reserva, r.fecha_creacion, r.notas_adicionales, c.nombre_completo, c.email
+    `;
+
+    const fetched = await db.query(fetchQuery, [id]);
+    const reserva = fetched.rows[0] || null;
+
+    res.json({ message: 'Reserva actualizada', reserva });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   crearReserva,
   getReservas,
   getEstadoCuenta,
-  checkoutReserva
+  checkoutReserva,
+  updateReserva
 };
