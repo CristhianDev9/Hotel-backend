@@ -181,7 +181,7 @@ const getReservas = async (req, res) => {
         r.id_reserva,
         r.id_cliente,
         r.estado_reserva,
-        r.fecha_creacion,
+        to_char(r.fecha_creacion, 'YYYY-MM-DD"T"HH24:MI:SS') as fecha_creacion,
         r.notas_adicionales,
         c.nombre_completo AS nombre_cliente,
         c.email,
@@ -197,7 +197,7 @@ const getReservas = async (req, res) => {
             )
           ) FILTER (WHERE dr.id_habitacion IS NOT NULL),
           '[]'
-        ) as habitaciones
+        ) as habitaciones_detalle
       FROM Reservas r
       LEFT JOIN Clientes c ON r.id_cliente = c.id_cliente
       LEFT JOIN Detalle_Reservas dr ON r.id_reserva = dr.id_reserva
@@ -246,7 +246,7 @@ const updateReserva = async (req, res) => {
         r.id_reserva,
         r.id_cliente,
         r.estado_reserva,
-        r.fecha_creacion,
+        to_char(r.fecha_creacion, 'YYYY-MM-DD"T"HH24:MI:SS') as fecha_creacion,
         r.notas_adicionales,
         c.nombre_completo AS nombre_cliente,
         c.email,
@@ -262,7 +262,7 @@ const updateReserva = async (req, res) => {
             )
           ) FILTER (WHERE dr.id_habitacion IS NOT NULL),
           '[]'
-        ) as habitaciones
+        ) as habitaciones_detalle
       FROM Reservas r
       LEFT JOIN Clientes c ON r.id_cliente = c.id_cliente
       LEFT JOIN Detalle_Reservas dr ON r.id_reserva = dr.id_reserva
@@ -280,10 +280,82 @@ const updateReserva = async (req, res) => {
   }
 };
 
+const deleteReserva = async (req, res) => {
+  const { id } = req.params;
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    const rCheck = await client.query('SELECT estado_reserva FROM Reservas WHERE id_reserva = $1 FOR UPDATE', [id]);
+    if (rCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Reserva no encontrada' });
+    }
+
+    const currentState = rCheck.rows[0].estado_reserva;
+    if (currentState === 'Finalizada') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'No se puede cancelar una reserva finalizada' });
+    }
+
+    // Marcar como Cancelada
+    await client.query('UPDATE Reservas SET estado_reserva = $1 WHERE id_reserva = $2', ['Cancelada', id]);
+
+    // Liberar habitaciones asociadas
+    const detHabs = await client.query('SELECT id_habitacion FROM Detalle_Reservas WHERE id_reserva = $1', [id]);
+    for (const row of detHabs.rows) {
+      await client.query('UPDATE Habitaciones SET estado = $1 WHERE id_habitacion = $2', ['Disponible', row.id_habitacion]);
+    }
+
+    // Recuperar reserva actualizada con detalle de habitaciones
+    const fetchQuery = `
+      SELECT 
+        r.id_reserva,
+        r.id_cliente,
+        r.estado_reserva,
+        to_char(r.fecha_creacion, 'YYYY-MM-DD"T"HH24:MI:SS') as fecha_creacion,
+        r.notas_adicionales,
+        c.nombre_completo AS nombre_cliente,
+        c.email,
+        COALESCE(COUNT(dr.id_habitacion), 0) as total_habitaciones,
+        COALESCE(SUM(dr.subtotal), 0) as total_costo,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id_habitacion', dr.id_habitacion,
+              'numero_habitacion', h.numero_habitacion,
+              'fecha_checkin', to_char(dr.fecha_checkin, 'YYYY-MM-DD'),
+              'fecha_checkout', to_char(dr.fecha_checkout, 'YYYY-MM-DD')
+            )
+          ) FILTER (WHERE dr.id_habitacion IS NOT NULL),
+          '[]'
+        ) as habitaciones_detalle
+      FROM Reservas r
+      LEFT JOIN Clientes c ON r.id_cliente = c.id_cliente
+      LEFT JOIN Detalle_Reservas dr ON r.id_reserva = dr.id_reserva
+      LEFT JOIN Habitaciones h ON dr.id_habitacion = h.id_habitacion
+      WHERE r.id_reserva = $1
+      GROUP BY r.id_reserva, r.id_cliente, r.estado_reserva, r.fecha_creacion, r.notas_adicionales, c.nombre_completo, c.email
+    `;
+
+    const fetched = await client.query(fetchQuery, [id]);
+    const reserva = fetched.rows[0] || null;
+
+    await client.query('COMMIT');
+    res.json({ message: 'Reserva cancelada correctamente', reserva });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   crearReserva,
   getReservas,
   getEstadoCuenta,
   checkoutReserva,
-  updateReserva
+  updateReserva,
+  deleteReserva
 };
